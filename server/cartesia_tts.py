@@ -1,10 +1,11 @@
 """
 Cartesia Sonic TTS streaming client.
 
-Model is swappable via CARTESIA_TTS_MODEL env var or constructor argument,
-so Sonic-3.5 and Sonic-3 run through the identical pipeline for a fair comparison.
+Uses: AsyncCartesia.tts.with_streaming_response.generate()
+      → iter_bytes(chunk_size) for streaming PCM audio.
 
-Audio format: PCM 16-bit 8 kHz (µ-law compatible with Plivo's stream).
+Model is swappable via constructor arg or CARTESIA_TTS_MODEL env var,
+so Sonic-3.5 (sonic-2) and Sonic-3 (sonic) run through the identical pipeline.
 """
 
 from __future__ import annotations
@@ -17,56 +18,32 @@ import logging
 
 log = logging.getLogger(__name__)
 
+OUTPUT_FORMAT = {
+    "container": "raw",
+    "encoding": "pcm_s16le",
+    "sample_rate": 8000,
+}
+
 
 class CartesiaTTSClient:
-    """
-    Async streaming TTS client wrapping the Cartesia Python SDK.
-
-    Yields raw PCM audio chunks as bytes.
-    Records timing hooks so the latency logger can be driven externally.
-    """
-
-    # Plivo <Stream> sends/receives µ-law 8 kHz; Cartesia can output PCM 8000
-    OUTPUT_FORMAT = {
-        "container": "raw",
-        "encoding": "pcm_s16le",
-        "sample_rate": 8000,
-    }
-
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        model: Optional[str] = None,
-        voice_id: Optional[str] = None,
-    ) -> None:
-        import cartesia  # late import to allow dry-run without the SDK installed
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, voice_id: Optional[str] = None):
+        import cartesia
         self._api_key = api_key or os.environ["CARTESIA_API_KEY"]
-        self._model = model or os.environ.get("CARTESIA_TTS_MODEL", os.environ.get("CARTESIA_MODEL_SONIC_35", "sonic-2"))
+        self._model = model or os.environ.get("CARTESIA_TTS_MODEL") or os.environ.get("CARTESIA_MODEL_SONIC_35", "sonic-2")
         self._voice_id = voice_id or os.environ["CARTESIA_VOICE_ID"]
         self._client = cartesia.AsyncCartesia(api_key=self._api_key)
         log.info("CartesiaTTSClient model=%s voice=%s", self._model, self._voice_id)
 
-    async def stream(
-        self,
-        text: str,
-        on_first_byte: Optional[callable] = None,
-    ) -> AsyncIterator[bytes]:
-        """
-        Yield PCM audio chunks for `text`.
-
-        `on_first_byte` is called (with no args) on the first audio chunk,
-        so the caller can record TTS_FIRST_AUDIO_BYTE in the latency log.
-        """
+    async def stream(self, text: str, on_first_byte: Optional[callable] = None) -> AsyncIterator[bytes]:
         first = True
         try:
-            async with self._client.tts.bytes(
+            async with self._client.tts.with_streaming_response.generate(
                 model_id=self._model,
                 transcript=text,
                 voice={"id": self._voice_id},
-                output_format=self.OUTPUT_FORMAT,
-                stream=True,
-            ) as response:
-                async for chunk in response:
+                output_format=OUTPUT_FORMAT,
+            ) as resp:
+                async for chunk in resp.iter_bytes(chunk_size=4096):
                     if chunk:
                         if first:
                             first = False
@@ -77,38 +54,31 @@ class CartesiaTTSClient:
             log.error("CartesiaTTS stream error: %s", exc)
             raise
 
-    async def close(self) -> None:
+    async def close(self):
         await self._client.close()
 
 
 class MockTTSClient:
-    """Dry-run stand-in: generates silent PCM frames without calling Cartesia."""
+    OUTPUT_FORMAT = OUTPUT_FORMAT
 
-    OUTPUT_FORMAT = CartesiaTTSClient.OUTPUT_FORMAT
-
-    def __init__(self, model: str = "mock-sonic") -> None:
+    def __init__(self, model: str = "mock-sonic"):
         self._model = model
 
-    async def stream(
-        self,
-        text: str,
-        on_first_byte: Optional[callable] = None,
-    ) -> AsyncIterator[bytes]:
-        log.info("[DRY-RUN] TTS mock stream: model=%s text=%r", self._model, text[:60])
-        # 0.5 s of silence at 8 kHz PCM-16 = 8000 samples × 2 bytes = 8000 bytes
+    async def stream(self, text: str, on_first_byte: Optional[callable] = None) -> AsyncIterator[bytes]:
+        log.info("[DRY-RUN] TTS mock stream model=%s text=%r", self._model, text[:60])
         silence = b"\x00\x00" * 4000
-        chunk_size = 320  # ~20 ms chunks
+        chunk_size = 320
         first = True
         for i in range(0, len(silence), chunk_size):
             await asyncio.sleep(0.02)
-            chunk = silence[i : i + chunk_size]
+            chunk = silence[i: i + chunk_size]
             if first:
                 first = False
                 if on_first_byte:
                     on_first_byte()
             yield chunk
 
-    async def close(self) -> None:
+    async def close(self):
         pass
 
 

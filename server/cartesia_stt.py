@@ -1,8 +1,10 @@
 """
 Cartesia Ink-2 streaming STT client.
 
-Consumes raw µ-law or PCM audio chunks from a Plivo audio stream and returns
-real-time transcript events (partial + final).
+Uses: AsyncCartesia.stt.auto_finalize.websocket()
+  - send_raw(bytes)  → send PCM audio chunks
+  - send({"type":"close"})  → finalize and flush
+  - recv()  → STTAutoFinalizeWebsocketResponse events
 """
 
 from __future__ import annotations
@@ -21,102 +23,88 @@ log = logging.getLogger(__name__)
 class TranscriptEvent:
     text: str
     is_final: bool
-    ts: float  # time.time() when the event was received from Cartesia
+    ts: float
 
 
 class CartesiaSTTClient:
-    """
-    Wraps Cartesia's streaming STT (Ink-2) for real-time transcription
-    of telephony audio.
-
-    Expected audio: PCM 16-bit signed little-endian at 8 kHz (after µ-law decode).
-    """
-
-    INPUT_ENCODING = "pcm_s16le"
+    ENCODING = "pcm_s16le"
     SAMPLE_RATE = 8000
 
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        model: Optional[str] = None,
-    ) -> None:
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         import cartesia
         self._api_key = api_key or os.environ["CARTESIA_API_KEY"]
         self._model = model or os.environ.get("CARTESIA_MODEL_INK_2", "ink-2")
         self._client = cartesia.AsyncCartesia(api_key=self._api_key)
         log.info("CartesiaSTTClient model=%s", self._model)
 
-    async def transcribe_stream(
-        self,
-        audio_chunks: AsyncIterator[bytes],
-    ) -> AsyncIterator[TranscriptEvent]:
-        """
-        Feed an async iterator of raw PCM audio and yield TranscriptEvents.
-
-        Cartesia's streaming STT API accepts audio as chunked bytes over a
-        WebSocket connection.  We send chunks as they arrive from the call leg
-        and yield transcript events as they come back.
-        """
+    async def transcribe_stream(self, audio_chunks: AsyncIterator[bytes]) -> AsyncIterator[TranscriptEvent]:
         try:
-            async with self._client.stt.stream(
+            async with self._client.stt.auto_finalize.websocket(
+                encoding=self.ENCODING,
                 model=self._model,
-                encoding=self.INPUT_ENCODING,
                 sample_rate=self.SAMPLE_RATE,
-                language="en",
-            ) as session:
+            ) as conn:
+                # Feed audio in a background task
                 async def _feed():
                     async for chunk in audio_chunks:
-                        await session.send(chunk)
-                    await session.send_eof()
+                        if chunk:
+                            await conn.send_raw(chunk)
+                    # Signal end of audio — triggers final transcript
+                    await conn.send({"type": "close"})
 
                 feed_task = asyncio.create_task(_feed())
 
-                async for event in session:
-                    ts = time.time()
-                    if hasattr(event, "transcript"):
-                        is_final = getattr(event, "is_final", False)
-                        text = event.transcript
-                        if text:
-                            yield TranscriptEvent(text=text, is_final=is_final, ts=ts)
+                # Receive transcript events
+                # Event types from Cartesia Ink-2 auto_finalize websocket:
+                #   connected      → session ready (skip)
+                #   turn.start     → turn beginning (skip)
+                #   turn.update    → partial rolling transcript
+                #   turn.eager_end → turn silently ended, quasi-final
+                #   turn.end       → final transcript, connection closes after
+                try:
+                    while True:
+                        event = await asyncio.wait_for(conn.recv(), timeout=10.0)
+                        ts = time.time()
+                        event_type = str(getattr(event, "type", ""))
+                        text = getattr(event, "transcript", None)
 
-                await feed_task
+                        if event_type in ("connected", "turn.start") or not text:
+                            continue
+
+                        is_final = event_type == "turn.end"
+                        yield TranscriptEvent(text=text.strip(), is_final=is_final, ts=ts)
+
+                        if is_final:
+                            break
+
+                except asyncio.TimeoutError:
+                    log.warning("STT recv timeout — no more events")
+                except Exception as exc:
+                    # Server closes connection after turn.end — normal
+                    log.info("STT recv ended: %s", exc)
+                finally:
+                    await feed_task
 
         except Exception as exc:
             log.error("CartesiaSTT stream error: %s", exc)
             raise
 
-    async def close(self) -> None:
+    async def close(self):
         await self._client.close()
 
 
 class MockSTTClient:
-    """Dry-run stand-in: echoes a fixed transcript after a simulated delay."""
-
-    def __init__(self, model: str = "mock-ink") -> None:
+    def __init__(self, model: str = "mock-ink"):
         self._model = model
 
-    async def transcribe_stream(
-        self,
-        audio_chunks: AsyncIterator[bytes],
-    ) -> AsyncIterator[TranscriptEvent]:
-        log.info("[DRY-RUN] STT mock transcription running")
-        # Drain the audio stream
+    async def transcribe_stream(self, audio_chunks: AsyncIterator[bytes]) -> AsyncIterator[TranscriptEvent]:
+        log.info("[DRY-RUN] STT mock")
         async for _ in audio_chunks:
             pass
         await asyncio.sleep(0.3)
-        yield TranscriptEvent(
-            text="This is a dry-run mock transcript.",
-            is_final=False,
-            ts=time.time(),
-        )
-        await asyncio.sleep(0.1)
-        yield TranscriptEvent(
-            text="This is a dry-run mock transcript.",
-            is_final=True,
-            ts=time.time(),
-        )
+        yield TranscriptEvent(text="This is a dry-run mock transcript.", is_final=True, ts=time.time())
 
-    async def close(self) -> None:
+    async def close(self):
         pass
 
 

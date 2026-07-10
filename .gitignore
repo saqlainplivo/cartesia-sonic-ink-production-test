@@ -5,7 +5,7 @@ __pycache__/
 venv/
 recordings/
 logs/
-results/results.md
+# results/results.md  (tracked — contains real measured data)
 *.wav
 *.mp3
 *.raw
