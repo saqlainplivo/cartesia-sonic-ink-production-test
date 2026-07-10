@@ -35,6 +35,7 @@ load_dotenv()
 from server.cartesia_tts import get_tts_client
 from server.cartesia_stt import get_stt_client, TranscriptEvent
 from server.latency_logger import CallLog, Stage, LOGS_DIR
+from server.agent import run_agent
 from telephony.provider import get_provider
 
 # ─── Config ───────────────────────────────────────────────────────────────────
@@ -258,3 +259,30 @@ async def audio_stream(websocket: WebSocket, call_uuid: str):
 @app.get("/health")
 def health():
     return {"status": "ok", "dry_run": DRY_RUN}
+
+
+# ─── Live agent endpoints ──────────────────────────────────────────────────────
+
+@app.post("/agent/answer")
+async def agent_answer(request: Request):
+    """Answer webhook for live agent demo calls."""
+    form = await request.form()
+    call_uuid = form.get("CallUUID", str(uuid.uuid4()))
+    log.info("Agent answer: call_uuid=%s", call_uuid)
+    stream_url = (
+        WEBHOOK_BASE_URL
+        .replace("https://", "wss://")
+        .replace("http://", "ws://")
+        + f"/agent/stream/{call_uuid}"
+    )
+    provider = get_provider(dry_run=False)
+    xml = provider.build_stream_xml(stream_url=stream_url)
+    return Response(content=xml, media_type="application/xml")
+
+
+@app.websocket("/agent/stream/{call_uuid}")
+async def agent_stream(websocket: WebSocket, call_uuid: str):
+    """Live agent WebSocket — Ink-2 STT → Groq LLM → Sonic TTS."""
+    await websocket.accept()
+    log.info("Agent stream connected: %s", call_uuid)
+    await run_agent(websocket, call_uuid)
