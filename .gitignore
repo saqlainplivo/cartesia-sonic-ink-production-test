@@ -1,0 +1,13 @@
+.env
+*.pyc
+__pycache__/
+.venv/
+venv/
+recordings/
+logs/
+results/results.md
+*.wav
+*.mp3
+*.raw
+*.log
+.DS_Store

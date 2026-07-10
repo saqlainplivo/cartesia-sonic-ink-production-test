@@ -1,0 +1,110 @@
+{
+  "categories": [
+    {
+      "id": "neutral",
+      "name": "Neutral Speech",
+      "description": "Plain informational text; baseline fluency and WER reference.",
+      "scripts": [
+        {
+          "id": "neutral_1",
+          "text": "Thank you for calling. Your account balance is currently up to date, and no payments are due at this time. Please stay on the line for further assistance.",
+          "reference_text": "Thank you for calling. Your account balance is currently up to date, and no payments are due at this time. Please stay on the line for further assistance."
+        },
+        {
+          "id": "neutral_2",
+          "text": "Our office hours are Monday through Friday, nine AM to five PM Eastern Time. You can also reach us online at any time.",
+          "reference_text": "Our office hours are Monday through Friday, nine AM to five PM Eastern Time. You can also reach us online at any time."
+        }
+      ]
+    },
+    {
+      "id": "emotion",
+      "name": "Emotional / Expressive",
+      "description": "Tests whether emotional prosody cues survive codec compression.",
+      "scripts": [
+        {
+          "id": "emotion_1",
+          "text": "I am so incredibly excited to share this news with you! This is truly one of the best days our team has ever had, and I genuinely cannot wait to tell you everything.",
+          "reference_text": "I am so incredibly excited to share this news with you! This is truly one of the best days our team has ever had, and I genuinely cannot wait to tell you everything."
+        },
+        {
+          "id": "emotion_2",
+          "text": "I understand how frustrating this situation must feel. I want you to know that your concerns are completely valid, and we are going to fix this together right now.",
+          "reference_text": "I understand how frustrating this situation must feel. I want you to know that your concerns are completely valid, and we are going to fix this together right now."
+        }
+      ]
+    },
+    {
+      "id": "apology",
+      "name": "Apology / Empathy",
+      "description": "Empathic, softer register — tests warmth retention post-codec.",
+      "scripts": [
+        {
+          "id": "apology_1",
+          "text": "I sincerely apologize for the inconvenience this has caused you. We take full responsibility, and I assure you that steps are already being taken to prevent this from happening again.",
+          "reference_text": "I sincerely apologize for the inconvenience this has caused you. We take full responsibility, and I assure you that steps are already being taken to prevent this from happening again."
+        },
+        {
+          "id": "apology_2",
+          "text": "We are truly sorry for the delay in resolving your issue. Your patience means a great deal to us, and we appreciate you giving us the chance to make this right.",
+          "reference_text": "We are truly sorry for the delay in resolving your issue. Your patience means a great deal to us, and we appreciate you giving us the chance to make this right."
+        }
+      ]
+    },
+    {
+      "id": "nonverbal",
+      "name": "Laughter / Non-verbal Tags",
+      "description": "Key test: does [laughter] render as audio or leak as spoken text post-codec?",
+      "scripts": [
+        {
+          "id": "nonverbal_1",
+          "text": "Oh, that is honestly the funniest thing I have heard all week. [laughter] I needed that. Thank you for brightening my day.",
+          "reference_text": "Oh, that is honestly the funniest thing I have heard all week. I needed that. Thank you for brightening my day.",
+          "nonverbal_tags": ["[laughter]"],
+          "expected_audio_only": true
+        },
+        {
+          "id": "nonverbal_2",
+          "text": "Well, I suppose we both know how that story ends. [laughter] Anyway, let me get back to what I was saying.",
+          "reference_text": "Well, I suppose we both know how that story ends. Anyway, let me get back to what I was saying.",
+          "nonverbal_tags": ["[laughter]"],
+          "expected_audio_only": true
+        }
+      ]
+    },
+    {
+      "id": "structured_data",
+      "name": "Structured Data — Numbers / Dates",
+      "description": "Phone numbers, dates, currency; WER on digits and formatted strings.",
+      "scripts": [
+        {
+          "id": "structured_1",
+          "text": "Your confirmation number is four seven two dash eight eight one dash zero zero nine three. Please save this for your records. Your appointment is scheduled for July fifteenth, twenty twenty-five at two thirty PM.",
+          "reference_text": "Your confirmation number is four seven two dash eight eight one dash zero zero nine three. Please save this for your records. Your appointment is scheduled for July fifteenth, twenty twenty-five at two thirty PM."
+        },
+        {
+          "id": "structured_2",
+          "text": "The total charge of one hundred and forty-two dollars and sixty-seven cents will appear on your statement within three to five business days. Your card ending in four four two one was charged.",
+          "reference_text": "The total charge of one hundred and forty-two dollars and sixty-seven cents will appear on your statement within three to five business days. Your card ending in four four two one was charged."
+        }
+      ]
+    },
+    {
+      "id": "condolence",
+      "name": "Condolence / Sensitive",
+      "description": "Delicate, low-energy delivery; hardest register to preserve through compression.",
+      "scripts": [
+        {
+          "id": "condolence_1",
+          "text": "We are deeply sorry for your loss. Please know that our team is here to support you through this difficult time, and we will handle every detail with the utmost care and respect.",
+          "reference_text": "We are deeply sorry for your loss. Please know that our team is here to support you through this difficult time, and we will handle every detail with the utmost care and respect."
+        },
+        {
+          "id": "condolence_2",
+          "text": "On behalf of everyone here, I want to offer our heartfelt condolences. There is absolutely no rush, and we will work at whatever pace feels right for you.",
+          "reference_text": "On behalf of everyone here, I want to offer our heartfelt condolences. There is absolutely no rush, and we will work at whatever pace feels right for you."
+        }
+      ]
+    }
+  ]
+}
